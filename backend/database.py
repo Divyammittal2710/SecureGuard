@@ -94,6 +94,7 @@ def reset_scan_history():
 
     conn = sqlite3.connect(DB_NAME)
     conn.execute("DELETE FROM scans")
+    conn.execute("DELETE FROM sqlite_sequence WHERE name = 'scans'")
     conn.commit()
     conn.close()
 
