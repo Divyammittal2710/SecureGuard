@@ -1,0 +1,252 @@
+[
+  {
+    "rule_id": "A01_ACCESS_CONTROL",
+    "owasp_category": "A01:2021",
+    "name": "Potential Broken Access Control",
+    "description": "Sensitive operations executed without authorization checks.",
+    "severity": "High",
+    "patterns": [
+      "is_admin = True",
+      "admin=True",
+      "role='admin'",
+      "role=\"admin\"",
+      "@app.delete",
+      "@app.put"
+    ],
+    "remediation_summary": "Verify user authorization before sensitive actions."
+  },
+  {
+    "rule_id": "A02_HARDCODED_SECRET",
+    "owasp_category": "A02:2021",
+    "name": "Hardcoded Secret",
+    "description": "Sensitive credentials stored directly in source code.",
+    "severity": "Medium",
+    "patterns": [
+      "password =",
+      "passwd =",
+      "secret =",
+      "secret_key =",
+      "api_key =",
+      "token =",
+      "access_token ="
+    ],
+    "remediation_summary": "Use environment variables or secret managers."
+  },
+  {
+    "rule_id": "A02_WEAK_CRYPTO",
+    "owasp_category": "A02:2021",
+    "name": "Weak Cryptography",
+    "description": "Weak hashing algorithms detected.",
+    "severity": "High",
+    "patterns": [
+      "md5(",
+      "hashlib.md5",
+      "sha1(",
+      "hashlib.sha1"
+    ],
+    "remediation_summary": "Use SHA-256, bcrypt, Argon2, or stronger algorithms."
+  },
+  {
+    "rule_id": "A03_SQL_INJECTION",
+    "owasp_category": "A03:2021",
+    "name": "Potential SQL Injection",
+    "description": "User-controlled input may reach SQL queries.",
+    "severity": "High",
+    "patterns": [
+      "SELECT *",
+      "INSERT INTO",
+      "UPDATE ",
+      "DELETE FROM",
+      "cursor.execute(f\"",
+      "cursor.execute(\"SELECT",
+      ".execute(query)"
+    ],
+    "remediation_summary": "Use parameterized queries."
+  },
+  {
+    "rule_id": "A03_COMMAND_INJECTION",
+    "owasp_category": "A03:2021",
+    "name": "Potential Command Injection",
+    "description": "Shell commands executed dynamically.",
+    "severity": "High",
+    "patterns": [
+      "os.system(",
+      "subprocess.call(",
+      "subprocess.run(",
+      "shell=True"
+    ],
+    "remediation_summary": "Avoid shell execution and validate inputs."
+  },
+  {
+    "rule_id": "A04_INSECURE_DESIGN",
+    "owasp_category": "A04:2021",
+    "name": "Insecure Design Pattern",
+    "description": "Business logic may rely on insecure defaults.",
+    "severity": "Medium",
+    "patterns": [
+      "TODO: security",
+      "bypass_auth",
+      "skip_auth",
+      "disable_auth"
+    ],
+    "remediation_summary": "Implement secure-by-default design."
+  },
+  {
+    "rule_id": "A05_DEBUG_ENABLED",
+    "owasp_category": "A05:2021",
+    "name": "Debug Mode Enabled",
+    "description": "Debug mode may expose sensitive information.",
+    "severity": "Medium",
+    "patterns": [
+      "DEBUG=True",
+      "debug=True",
+      "app.run(debug=True)"
+    ],
+    "remediation_summary": "Disable debug mode in production."
+  },
+  {
+    "rule_id": "A05_CORS_MISCONFIG",
+    "owasp_category": "A05:2021",
+    "name": "Permissive CORS Configuration",
+    "description": "CORS allows requests from all origins.",
+    "severity": "Medium",
+    "patterns": [
+      "allow_origins=['*']",
+      "allow_origins=[\"*\"]",
+      "Access-Control-Allow-Origin: *"
+    ],
+    "remediation_summary": "Restrict allowed origins."
+  },
+  {
+    "rule_id": "A06_VULNERABLE_COMPONENT",
+    "owasp_category": "A06:2021",
+    "name": "Potential Vulnerable Dependency",
+    "description": "Dependency versions may require review.",
+    "severity": "Medium",
+    "patterns": [
+      "requirements.txt",
+      "package.json",
+      "pip install"
+    ],
+    "remediation_summary": "Review dependencies using Snyk."
+  },
+  {
+    "rule_id": "A07_WEAK_AUTH",
+    "owasp_category": "A07:2021",
+    "name": "Weak Authentication Logic",
+    "description": "Authentication relies on insecure comparisons.",
+    "severity": "High",
+    "patterns": [
+      "if password ==",
+      "username == 'admin'",
+      "username == \"admin\""
+    ],
+    "remediation_summary": "Use secure authentication frameworks."
+  },
+  {
+    "rule_id": "A08_INSECURE_DESERIALIZATION",
+    "owasp_category": "A08:2021",
+    "name": "Insecure Deserialization",
+    "description": "Unsafe object deserialization detected.",
+    "severity": "High",
+    "patterns": [
+      "pickle.loads(",
+      "yaml.load(",
+      "marshal.loads("
+    ],
+    "remediation_summary": "Use safe loaders and validate input."
+  },
+  {
+    "rule_id": "A09_INSUFFICIENT_LOGGING",
+    "owasp_category": "A09:2021",
+    "name": "Potential Missing Security Logging",
+    "description": "Exception handling without logging.",
+    "severity": "Low",
+    "patterns": [
+      "except:",
+      "except Exception:",
+      "pass"
+    ],
+    "remediation_summary": "Log security-relevant events."
+  },
+  {
+    "rule_id": "A10_SSRF",
+    "owasp_category": "A10:2021",
+    "name": "Potential Server-Side Request Forgery",
+    "description": "Application fetches URLs from user-controlled sources.",
+    "severity": "High",
+    "patterns": [
+      "requests.get(",
+      "requests.post(",
+      "urllib.request.urlopen("
+    ],
+    "remediation_summary": "Validate and whitelist outbound URLs."
+  },
+
+  {
+    "rule_id": "OWASP-LLM01",
+    "owasp_category": "LLM01",
+    "name": "Prompt Injection Risk",
+    "description": "User input directly included in LLM prompt.",
+    "severity": "High",
+    "patterns": [
+      "prompt = user_input",
+      "f\"{user_input}\"",
+      "prompt += user_input",
+      "messages.append(user_input)"
+    ]
+  },
+  {
+    "rule_id": "OWASP-LLM02",
+    "owasp_category": "LLM02",
+    "name": "Sensitive Information Exposure",
+    "description": "Sensitive data sent to LLM.",
+    "severity": "High",
+    "patterns": [
+      "api_key",
+      "secret_key",
+      "password",
+      "token",
+      "access_token"
+    ]
+  },
+  {
+    "rule_id": "OWASP-LLM05",
+    "owasp_category": "LLM05",
+    "name": "Unsafe LLM Output Execution",
+    "description": "LLM output executed without validation.",
+    "severity": "High",
+    "patterns": [
+      "eval(response)",
+      "exec(response)",
+      "os.system(response)",
+      "subprocess.run(response)"
+    ]
+  },
+  {
+    "rule_id": "OWASP-LLM06",
+    "owasp_category": "LLM06",
+    "name": "Excessive Agent Permissions",
+    "description": "LLM can trigger system actions.",
+    "severity": "High",
+    "patterns": [
+      "os.system(",
+      "subprocess.Popen(",
+      "delete_file(",
+      "send_email("
+    ]
+  },
+  {
+    "rule_id": "OWASP-LLM08",
+    "owasp_category": "LLM08",
+    "name": "Vector Store Data Leakage",
+    "description": "Sensitive data embedded into vector database.",
+    "severity": "Medium",
+    "patterns": [
+      "embedding_model.embed",
+      "vector_store.add",
+      "chroma.add",
+      "pinecone.upsert"
+    ]
+  }
+]
