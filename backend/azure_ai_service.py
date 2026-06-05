@@ -6,8 +6,9 @@ load_dotenv()
 
 # Initialize Azure AI Foundry client
 client = OpenAI(
-    base_url=os.getenv("PROJECT_ENDPOINT"),
-    api_key=os.getenv("AZURE_API_KEY")
+    base_url=os.getenv("PROJECT_ENDPOINT") + "/openai",
+    api_key=os.getenv("AZURE_API_KEY"),
+    default_query={"api-version": "2025-01-01-preview"}
 )
 
 MODEL = os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-5-mini")
