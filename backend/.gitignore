@@ -1,2 +1,3 @@
 # Covered by root .gitignore — backend-specific additions only
 rules/__pycache__/
+.env

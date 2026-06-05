@@ -1,6 +1,6 @@
 from graph_state import ScanState
 from rule_engine import scan_code
-from gemini_service import analyze_with_gemini
+from azure_ai_service import analyze_with_azure   # ← changed
 from database import save_scan
 
 
@@ -28,7 +28,7 @@ def node_scan(state: ScanState) -> dict:
 
 
 def node_analyze(state: ScanState) -> dict:
-    report = analyze_with_gemini(state["code"], state["findings"])
+    report = analyze_with_azure(state["code"], state["findings"])  # ← changed
     return {"report": report}
 
 
