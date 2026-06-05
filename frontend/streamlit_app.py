@@ -1,5 +1,9 @@
 import streamlit as st
 import requests
+import os
+
+# Backend URL - uses env var in production, localhost in development
+BACKEND_URL = os.getenv("https://secureguard-backend.jollyhill-a64c45f6.eastus.azurecontainerapps.io/", "http://127.0.0.1:8002")
 
 st.set_page_config(
     page_title="SecureGuard",
@@ -13,7 +17,7 @@ st.sidebar.title(" Scan History")
 
 if st.sidebar.button("Reset History", type="primary"):
     try:
-        requests.delete("http://127.0.0.1:8002/history/reset")
+        requests.delete(f"{BACKEND_URL}/history/reset")
         st.sidebar.success("History cleared.")
         st.rerun()
     except Exception as e:
@@ -34,7 +38,7 @@ if st.button("Analyze"):
     try:
 
         response = requests.post(
-            "http://127.0.0.1:8002/analyze",
+            f"{BACKEND_URL}/analyze",
             json={"code": code}
         )
 
@@ -134,7 +138,7 @@ if st.button("Analyze"):
 try:
 
     history_response = requests.get(
-        "http://127.0.0.1:8002/history"
+        f"{BACKEND_URL}/history"
     )
 
     history = history_response.json()
@@ -162,4 +166,3 @@ except:
     st.sidebar.warning(
         "History unavailable."
     )
-    
