@@ -3,7 +3,7 @@ import requests
 import os
 
 # Backend URL - uses env var in production, localhost in development
-BACKEND_URL = os.getenv("https://secureguard-backend.jollyhill-a64c45f6.eastus.azurecontainerapps.io/", "http://127.0.0.1:8002")
+BACKEND_URL = os.getenv("https://secureguard-backend.jollyhill-a64c45f6.eastus.azurecontainerapps.io/", "https://secureguard-backend.jollyhill-a64c45f6.eastus.azurecontainerapps.io")
 
 st.set_page_config(
     page_title="SecureGuard",
