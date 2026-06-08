@@ -3,14 +3,17 @@ import requests
 import os
 
 BACKEND_URL = os.getenv(
-    "https://secureguard-backend.jollyhill-a64c45f6.eastus.azurecontainerapps.io/",
+    "BACKEND_URL",
     "https://secureguard-backend.jollyhill-a64c45f6.eastus.azurecontainerapps.io"
 )
 
-# API key is read from env var — never hardcoded.
-# Set API_KEY in your .env and in Azure Container App environment variables.
+# API key for regular requests (/analyze, /history)
 API_KEY = os.getenv("API_KEY", "")
 HEADERS = {"X-API-Key": API_KEY}
+
+# Admin key for destructive operations (/history/reset)
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
+ADMIN_HEADERS = {"X-API-Key": ADMIN_API_KEY}
 
 st.set_page_config(
     page_title="SecureGuard",
@@ -24,7 +27,10 @@ st.sidebar.title("🕓 Scan History")
 
 if st.sidebar.button("Reset History", type="primary"):
     try:
-        requests.delete(f"{BACKEND_URL}/history/reset")
+        requests.delete(
+            f"{BACKEND_URL}/history/reset",
+            headers=ADMIN_HEADERS
+        )
         st.sidebar.success("History cleared.")
         st.rerun()
     except Exception as e:
