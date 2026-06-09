@@ -1,7 +1,10 @@
 # backend/app.py
 import os
-from fastapi import FastAPI, HTTPException, Header, Depends, Request
+import logging
+from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -9,17 +12,16 @@ from schemas import CodeRequest, detect_language
 from database import init_db, get_full_scan_history, reset_scan_history
 from security_graph import security_graph
 
+# ---------------------------------------------------------------------------
+# Logging — structured logs, never log sensitive values like API keys
+# ---------------------------------------------------------------------------
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Rate limiter — keyed by API key, falls back to IP if no key present.
-# Per-key limiting means each developer has their own independent quota.
-# This is how OpenAI, Stripe, and Snyk implement rate limiting.
 # ---------------------------------------------------------------------------
 def get_api_key_or_ip(request: Request) -> str:
-    """
-    Use the API key as the rate limit identifier if present.
-    Falls back to IP address for unauthenticated requests.
-    """
     api_key = request.headers.get("x-api-key", "")
     if api_key:
         return api_key
@@ -28,7 +30,18 @@ def get_api_key_or_ip(request: Request) -> str:
 
 limiter = Limiter(key_func=get_api_key_or_ip)
 
-app = FastAPI()
+# ---------------------------------------------------------------------------
+# App — /docs and /redoc disabled in production.
+# Set DEBUG=true locally to enable Swagger UI.
+# ---------------------------------------------------------------------------
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+
+app = FastAPI(
+    title="SecureGuard API",
+    docs_url="/docs" if DEBUG else None,
+    redoc_url="/redoc" if DEBUG else None,
+    openapi_url="/openapi.json" if DEBUG else None,
+)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -46,22 +59,77 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------------------------
-# API key auth — validated against API_KEY environment variable.
-# Keys are stored as Azure Container Apps secrets — never in code.
-# Same error message for missing AND invalid keys — prevents
-# attackers from knowing whether a key exists.
-# ---------------------------------------------------------------------------
 API_KEY = os.getenv("API_KEY", "")
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
 
+# ---------------------------------------------------------------------------
+# Global exception handlers — structured JSON, no stack traces, no internals
+# ---------------------------------------------------------------------------
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Override FastAPI's default 422 handler.
+    Default exposes internal field names and types — we sanitize it.
+    """
+    errors = []
+    for error in exc.errors():
+        field = " → ".join(str(loc) for loc in error["loc"] if loc != "body")
+        errors.append({
+            "field": field,
+            "message": error["msg"]
+        })
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "validation_error",
+            "message": "Invalid request data",
+            "details": errors
+        }
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """
+    Override FastAPI's default HTTP exception handler.
+    Returns consistent JSON structure for all HTTP errors.
+    """
+    error_codes = {
+        400: "bad_request",
+        401: "unauthorized",
+        403: "forbidden",
+        404: "not_found",
+        429: "rate_limit_exceeded",
+        500: "internal_error",
+    }
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": error_codes.get(exc.status_code, "http_error"),
+            "message": exc.detail
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Catch-all for unhandled exceptions.
+    Logs the real error internally but never exposes it to the client.
+    No stack traces, no file paths, no Azure URLs in the response.
+    """
+    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_error",
+            "message": "An unexpected error occurred. Please try again later."
+        }
+    )
+
 
 def verify_admin_key(x_api_key: str = Header(default="")):
-    """
-    Admin key validated against ADMIN_API_KEY env var.
-    Used only for destructive operations like history reset.
-    Regular API key holders cannot perform admin operations.
-    """
     if not ADMIN_API_KEY:
         raise HTTPException(
             status_code=500,
@@ -92,7 +160,6 @@ async def analyze(
     """
     10 requests per minute per API key.
     Prevents token exhaustion attacks on Azure AI Foundry.
-    A legitimate developer rarely needs more than 10 scans/minute.
     """
     if not API_KEY:
         raise HTTPException(
@@ -126,8 +193,7 @@ async def detect_language_endpoint(
 ):
     """
     Detects the language of submitted code using heuristics.
-    Returns detected language and whether it matches submitted language.
-    60 requests per minute — lightweight endpoint, no AI call.
+    60 requests per minute — lightweight, no AI call.
     """
     if not API_KEY:
         raise HTTPException(
@@ -165,8 +231,7 @@ async def history(
     x_api_key: str = Header(default="")
 ):
     """
-    30 requests per minute — history is cheaper than analyze
-    (no AI call) so a higher limit is fine.
+    30 requests per minute — history is cheaper than analyze.
     """
     if not API_KEY:
         raise HTTPException(
