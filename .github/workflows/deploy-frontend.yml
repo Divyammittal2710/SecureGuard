@@ -10,7 +10,6 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,4 +26,6 @@ jobs:
         with:
           context: ./frontend
           push: true
-          tags: secureguardacr.azurecr.io/secureguard-frontend:latest
+          tags: |
+            secureguardacr.azurecr.io/secureguard-frontend:latest
+            secureguardacr.azurecr.io/secureguard-frontend:${{ github.sha }}
