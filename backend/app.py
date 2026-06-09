@@ -1,9 +1,7 @@
 # backend/app.py
 import os
-import hashlib
 from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -14,14 +12,13 @@ from security_graph import security_graph
 
 # ---------------------------------------------------------------------------
 # Rate limiter — keyed by API key, falls back to IP if no key present.
-# Per-key limiting means each developer has their own quota.
+# Per-key limiting means each developer has their own independent quota.
 # This is how OpenAI, Stripe, and Snyk implement rate limiting.
 # ---------------------------------------------------------------------------
 def get_api_key_or_ip(request: Request) -> str:
     """
     Use the API key as the rate limit identifier if present.
     Falls back to IP address for unauthenticated requests.
-    This ensures each developer key has its own independent quota.
     """
     api_key = request.headers.get("x-api-key", "")
     if api_key:
@@ -51,45 +48,50 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
-# API key auth — hash the env var key once on startup.
-# Incoming keys are hashed and compared — plaintext never compared directly.
+# API key auth — validated against API_KEY environment variable.
+# Keys are stored as Azure Container Apps secrets — never in code.
 # Same error message for missing AND invalid keys — prevents
 # attackers from knowing whether a key exists.
+# For multiple keys or key rotation, move to database in a later week.
 # ---------------------------------------------------------------------------
 API_KEY = os.getenv("API_KEY", "")
-API_KEY_HASH = hashlib.sha256(API_KEY.encode()).hexdigest() if API_KEY else ""
-
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
-ADMIN_API_KEY_HASH = hashlib.sha256(ADMIN_API_KEY.encode()).hexdigest() if ADMIN_API_KEY else ""
 
 
 def require_api_key(x_api_key: str = Header(default="")):
     """
     Validates developer API key on every protected route.
-    Compares SHA-256 hashes — never compares plaintext.
     Same error message for missing AND invalid keys — prevents
     attackers from knowing whether a key exists.
     """
-    if not x_api_key:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
-    incoming_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
-    if not API_KEY_HASH or incoming_hash != API_KEY_HASH:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+    if not API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="API_KEY not configured on server"
+        )
+    if not x_api_key or x_api_key != API_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key"
+        )
 
 
 def verify_admin_key(x_api_key: str = Header(default="")):
     """
     Admin key validated against ADMIN_API_KEY env var.
-    Hashed comparison — never plaintext.
     Used only for destructive operations like history reset.
+    Regular API key holders cannot perform admin operations.
     """
-    if not ADMIN_API_KEY_HASH:
-        raise HTTPException(status_code=500, detail="ADMIN_API_KEY not configured on server")
-    if not x_api_key:
-        raise HTTPException(status_code=403, detail="Invalid or missing API key")
-    incoming_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
-    if incoming_hash != ADMIN_API_KEY_HASH:
-        raise HTTPException(status_code=403, detail="Invalid or missing API key")
+    if not ADMIN_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="ADMIN_API_KEY not configured on server"
+        )
+    if not x_api_key or x_api_key != ADMIN_API_KEY:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid or missing API key"
+        )
 
 
 init_db()
