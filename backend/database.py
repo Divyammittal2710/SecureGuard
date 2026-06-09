@@ -15,11 +15,9 @@ def _hash_key(raw_key: str) -> str:
 
 
 def init_db():
-
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # Scan history table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS scans (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,8 +30,6 @@ def init_db():
     )
     """)
 
-    # API keys table — stores hashed keys only, never plaintext.
-    # label is a human-readable name (e.g. "divyam-dev-key") for auditing.
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS api_keys (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,9 +39,20 @@ def init_db():
     )
     """)
 
+    # Auto-seed API key from env var on startup if table is empty
+    import os
+    raw_key = os.getenv("API_KEY", "")
+    if raw_key:
+        cursor.execute("SELECT COUNT(*) FROM api_keys")
+        count = cursor.fetchone()[0]
+        if count == 0:
+            cursor.execute(
+                "INSERT INTO api_keys (label, key_hash) VALUES (?, ?)",
+                ("default-key", _hash_key(raw_key))
+            )
+
     conn.commit()
     conn.close()
-
 
 def store_api_key(label: str, raw_key: str):
     """Store a new hashed API key with a human-readable label."""
