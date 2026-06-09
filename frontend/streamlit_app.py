@@ -154,4 +154,4 @@ try:
         st.sidebar.dataframe(history_table, use_container_width=True)
 
 except:
-    st.sidebar.warning("History unavailable.")
+    st.sidebar.warning("History unavailable.")# updated
