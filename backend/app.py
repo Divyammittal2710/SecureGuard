@@ -52,28 +52,9 @@ app.add_middleware(
 # Keys are stored as Azure Container Apps secrets — never in code.
 # Same error message for missing AND invalid keys — prevents
 # attackers from knowing whether a key exists.
-# For multiple keys or key rotation, move to database in a later week.
 # ---------------------------------------------------------------------------
 API_KEY = os.getenv("API_KEY", "")
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
-
-
-def require_api_key(x_api_key: str = Header(default="")):
-    """
-    Validates developer API key on every protected route.
-    Same error message for missing AND invalid keys — prevents
-    attackers from knowing whether a key exists.
-    """
-    if not API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="API_KEY not configured on server"
-        )
-    if not x_api_key or x_api_key != API_KEY:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or missing API key"
-        )
 
 
 def verify_admin_key(x_api_key: str = Header(default="")):
@@ -102,14 +83,29 @@ def home():
     return {"message": "SecureGuard Running"}
 
 
-@app.post("/analyze", dependencies=[Depends(require_api_key)])
+@app.post("/analyze")
 @limiter.limit("10/minute")
-def analyze(request: Request, code_request: CodeRequest):
+async def analyze(
+    request: Request,
+    code_request: CodeRequest,
+    x_api_key: str = Header(default="")
+):
     """
     10 requests per minute per API key.
     Prevents token exhaustion attacks on Azure AI Foundry.
     A legitimate developer rarely needs more than 10 scans/minute.
     """
+    if not API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="API_KEY not configured on server"
+        )
+    if not x_api_key or x_api_key != API_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key"
+        )
+
     result = security_graph.invoke({"code": code_request.code})
     return {
         "findings": result["findings"],
@@ -126,13 +122,27 @@ def clear_history(x_api_key: str = Header(default="")):
     return {"message": "Scan history cleared"}
 
 
-@app.get("/history", dependencies=[Depends(require_api_key)])
+@app.get("/history")
 @limiter.limit("30/minute")
-def history(request: Request):
+async def history(
+    request: Request,
+    x_api_key: str = Header(default="")
+):
     """
     30 requests per minute — history is cheaper than analyze
     (no AI call) so a higher limit is fine.
     """
+    if not API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="API_KEY not configured on server"
+        )
+    if not x_api_key or x_api_key != API_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key"
+        )
+
     rows = get_full_scan_history()
     return [
         {
