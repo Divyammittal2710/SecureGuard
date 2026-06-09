@@ -1,5 +1,5 @@
 # backend/schemas.py
-
+from enum import Enum
 from pydantic import BaseModel, Field, field_validator
 
 # 20,000 characters ~ 500 lines of code — enough for real use,
@@ -7,8 +7,22 @@ from pydantic import BaseModel, Field, field_validator
 MAX_CODE_LENGTH = 20_000
 
 
+class Language(str, Enum):
+    python = "python"
+    javascript = "javascript"
+    java = "java"
+    typescript = "typescript"
+    go = "go"
+    rust = "rust"
+    cpp = "cpp"
+    c = "c"
+    ruby = "ruby"
+    php = "php"
+
+
 class CodeRequest(BaseModel):
     code: str = Field(..., min_length=1, max_length=MAX_CODE_LENGTH)
+    language: Language  # required — must match enum exactly
 
     @field_validator("code")
     @classmethod

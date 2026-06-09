@@ -1,3 +1,4 @@
+# frontend/streamlit_app.py
 import streamlit as st
 import requests
 import os
@@ -7,13 +8,16 @@ BACKEND_URL = os.getenv(
     "https://secureguard-backend.jollyhill-a64c45f6.eastus.azurecontainerapps.io"
 )
 
-# API key for regular requests (/analyze, /history)
 API_KEY = os.getenv("API_KEY", "")
 HEADERS = {"X-API-Key": API_KEY}
 
-# Admin key for destructive operations (/history/reset)
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
 ADMIN_HEADERS = {"X-API-Key": ADMIN_API_KEY}
+
+LANGUAGES = [
+    "python", "javascript", "java", "typescript",
+    "go", "rust", "cpp", "c", "ruby", "php"
+]
 
 st.set_page_config(
     page_title="SecureGuard",
@@ -36,10 +40,17 @@ if st.sidebar.button("Reset History", type="primary"):
     except Exception as e:
         st.sidebar.error(f"Failed to reset: {str(e)}")
 
+# Language selector
+language = st.selectbox(
+    "Select Language",
+    options=LANGUAGES,
+    index=0  # defaults to python
+)
+
 code = st.text_area(
     "Paste Code Here",
     height=300,
-    placeholder="Paste your Python code here..."
+    placeholder=f"Paste your {language} code here..."
 )
 
 if st.button("Analyze"):
@@ -49,10 +60,9 @@ if st.button("Analyze"):
         st.stop()
 
     try:
-
         response = requests.post(
             f"{BACKEND_URL}/analyze",
-            json={"code": code},
+            json={"code": code, "language": language},
             headers=HEADERS
         )
 
@@ -61,7 +71,11 @@ if st.button("Analyze"):
             st.stop()
 
         if response.status_code == 422:
-            st.error("❌ Invalid input — code may be too long or malformed.")
+            st.error("❌ Invalid input — code may be too long, wrong language, or malformed.")
+            st.stop()
+
+        if response.status_code == 429:
+            st.error("⏱️ Rate limit exceeded — please wait a minute and try again.")
             st.stop()
 
         result = response.json()
@@ -73,13 +87,16 @@ if st.button("Analyze"):
         risk_score = result.get("risk_score", 0)
         risk_level = result.get("risk_level", "Unknown")
 
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
 
         with col1:
             st.metric(label="Risk Score", value=f"{risk_score}/10")
 
         with col2:
             st.metric(label="Risk Level", value=risk_level)
+
+        with col3:
+            st.metric(label="Language", value=language.upper())
 
         if risk_level.lower() == "high":
             st.error("🚨 Overall Risk: HIGH")

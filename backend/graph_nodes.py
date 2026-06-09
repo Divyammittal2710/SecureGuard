@@ -1,6 +1,7 @@
+# backend/graph_nodes.py
 from graph_state import ScanState
 from rule_engine import scan_code
-from azure_ai_service import analyze_with_azure   # ← changed
+from azure_ai_service import analyze_with_azure
 from database import save_scan
 
 
@@ -28,7 +29,12 @@ def node_scan(state: ScanState) -> dict:
 
 
 def node_analyze(state: ScanState) -> dict:
-    report = analyze_with_azure(state["code"], state["findings"])  # ← changed
+    # Pass language to AI so it tailors analysis per language
+    report = analyze_with_azure(
+        state["code"],
+        state["findings"],
+        state.get("language", "python")
+    )
     return {"report": report}
 
 
