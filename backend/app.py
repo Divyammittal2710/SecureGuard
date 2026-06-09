@@ -107,4 +107,4 @@ async def history(
             "created_at": row[3],
         }
         for row in rows
-    ]
+    ]# updated
