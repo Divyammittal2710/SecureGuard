@@ -44,7 +44,7 @@ if st.sidebar.button("Reset History", type="primary"):
 language = st.selectbox(
     "Select Language",
     options=LANGUAGES,
-    index=0  # defaults to python
+    index=0
 )
 
 code = st.text_area(
@@ -52,6 +52,25 @@ code = st.text_area(
     height=300,
     placeholder=f"Paste your {language} code here..."
 )
+
+# Language mismatch detection
+if code.strip():
+    try:
+        detect_response = requests.post(
+            f"{BACKEND_URL}/detect-language",
+            json={"code": code, "language": language},
+            headers=HEADERS
+        )
+        if detect_response.status_code == 200:
+            detect_result = detect_response.json()
+            if not detect_result["match"] and detect_result["detected"] != "unknown":
+                st.warning(
+                    f"⚠️ Detected language: **{detect_result['detected'].upper()}** "
+                    f"but you selected: **{language.upper()}**. "
+                    f"Consider changing the language for more accurate analysis."
+                )
+    except:
+        pass  # Detection failure is non-critical — don't block the user
 
 if st.button("Analyze"):
 
@@ -154,4 +173,4 @@ try:
         st.sidebar.dataframe(history_table, use_container_width=True)
 
 except:
-    st.sidebar.warning("History unavailable.")# updated
+    st.sidebar.warning("History unavailable.")
