@@ -1,5 +1,6 @@
 # backend/app.py
 import os
+import hashlib
 from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -7,7 +8,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from schemas import CodeRequest
-from database import init_db, get_full_scan_history, reset_scan_history, validate_api_key
+from database import init_db, get_full_scan_history, reset_scan_history
 from security_graph import security_graph
 
 
@@ -50,34 +51,44 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
-# API key auth — keys are stored hashed in SQLite via database.py.
-# validate_api_key hashes the incoming key and compares against stored hash.
-# Never stores or compares plaintext keys.
+# API key auth — hash the env var key once on startup.
+# Incoming keys are hashed and compared — plaintext never compared directly.
+# Same error message for missing AND invalid keys — prevents
+# attackers from knowing whether a key exists.
 # ---------------------------------------------------------------------------
+API_KEY = os.getenv("API_KEY", "")
+API_KEY_HASH = hashlib.sha256(API_KEY.encode()).hexdigest() if API_KEY else ""
+
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
+ADMIN_API_KEY_HASH = hashlib.sha256(ADMIN_API_KEY.encode()).hexdigest() if ADMIN_API_KEY else ""
 
 
 def require_api_key(x_api_key: str = Header(default="")):
     """
     Validates developer API key on every protected route.
-    Hashes the incoming key and checks against the database.
+    Compares SHA-256 hashes — never compares plaintext.
     Same error message for missing AND invalid keys — prevents
     attackers from knowing whether a key exists.
     """
     if not x_api_key:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
-    if not validate_api_key(x_api_key):
+    incoming_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
+    if not API_KEY_HASH or incoming_hash != API_KEY_HASH:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 def verify_admin_key(x_api_key: str = Header(default="")):
     """
     Admin key validated against ADMIN_API_KEY env var.
+    Hashed comparison — never plaintext.
     Used only for destructive operations like history reset.
     """
-    if not ADMIN_API_KEY:
+    if not ADMIN_API_KEY_HASH:
         raise HTTPException(status_code=500, detail="ADMIN_API_KEY not configured on server")
-    if not x_api_key or x_api_key != ADMIN_API_KEY:
+    if not x_api_key:
+        raise HTTPException(status_code=403, detail="Invalid or missing API key")
+    incoming_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
+    if incoming_hash != ADMIN_API_KEY_HASH:
         raise HTTPException(status_code=403, detail="Invalid or missing API key")
 
 
