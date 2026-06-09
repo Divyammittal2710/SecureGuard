@@ -19,9 +19,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Rate limit config — controlled via env vars.
+# Production: 20/hour on analyze to control Azure OpenAI costs.
+# Development: override with higher limits in .env for easy testing.
+# ---------------------------------------------------------------------------
+ANALYZE_RATE_LIMIT = os.getenv("ANALYZE_RATE_LIMIT", "20/hour")
+HISTORY_RATE_LIMIT = os.getenv("HISTORY_RATE_LIMIT", "60/hour")
+DETECT_RATE_LIMIT = os.getenv("DETECT_RATE_LIMIT", "100/hour")
+
+# ---------------------------------------------------------------------------
 # Rate limiter — keyed by API key, falls back to IP if no key present.
 # ---------------------------------------------------------------------------
 def get_api_key_or_ip(request: Request) -> str:
+    """
+    Use the API key as the rate limit identifier if present.
+    Falls back to IP address for unauthenticated requests.
+    """
     api_key = request.headers.get("x-api-key", "")
     if api_key:
         return api_key
@@ -151,15 +164,15 @@ def home():
 
 
 @app.post("/analyze")
-@limiter.limit("10/minute")
+@limiter.limit(ANALYZE_RATE_LIMIT)
 async def analyze(
     request: Request,
     code_request: CodeRequest,
     x_api_key: str = Header(default="")
 ):
     """
-    10 requests per minute per API key.
-    Prevents token exhaustion attacks on Azure AI Foundry.
+    Rate limit controlled via ANALYZE_RATE_LIMIT env var.
+    Default: 20/hour in production to control Azure OpenAI costs.
     """
     if not API_KEY:
         raise HTTPException(
@@ -185,7 +198,7 @@ async def analyze(
 
 
 @app.post("/detect-language")
-@limiter.limit("60/minute")
+@limiter.limit(DETECT_RATE_LIMIT)
 async def detect_language_endpoint(
     request: Request,
     code_request: CodeRequest,
@@ -193,7 +206,8 @@ async def detect_language_endpoint(
 ):
     """
     Detects the language of submitted code using heuristics.
-    60 requests per minute — lightweight, no AI call.
+    Rate limit controlled via DETECT_RATE_LIMIT env var.
+    Default: 100/hour — lightweight, no AI call.
     """
     if not API_KEY:
         raise HTTPException(
@@ -225,13 +239,14 @@ def clear_history(x_api_key: str = Header(default="")):
 
 
 @app.get("/history")
-@limiter.limit("30/minute")
+@limiter.limit(HISTORY_RATE_LIMIT)
 async def history(
     request: Request,
     x_api_key: str = Header(default="")
 ):
     """
-    30 requests per minute — history is cheaper than analyze.
+    Rate limit controlled via HISTORY_RATE_LIMIT env var.
+    Default: 60/hour — no AI call so higher limit is fine.
     """
     if not API_KEY:
         raise HTTPException(
