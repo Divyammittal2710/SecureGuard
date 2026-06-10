@@ -77,9 +77,16 @@ def extract_imports(code: str, language: str) -> List[str]:
         imports = re.findall(pattern, code, re.MULTILINE)
 
     elif language in ("javascript", "typescript"):
-        # Match: import x from 'y', require('y'), import('y')
-        pattern = r"(?:import|require)\s*[\(\{]?\s*['\"][\w\.\-\/@]+"
-        imports = re.findall(pattern, code)
+        imports = []
+        # Match: require('express'), require("express")
+        require_pattern = r"require\s*\(\s*['\"][\w\.\-\/@]+"
+        imports += re.findall(require_pattern, code)
+        # Match: import axios from 'axios', import { x } from 'y'
+        import_pattern = r"from\s+['\"][\w\.\-\/@]+"
+        imports += re.findall(import_pattern, code)
+        # Match: import 'module' (side effect imports)
+        side_effect_pattern = r"^import\s+['\"][\w\.\-\/@]+"
+        imports += re.findall(side_effect_pattern, code, re.MULTILINE)
 
     elif language == "java":
         # Match: import com.example.Class
