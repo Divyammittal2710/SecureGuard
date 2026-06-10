@@ -59,7 +59,9 @@
       "DELETE FROM",
       "cursor.execute(f\"",
       "cursor.execute(\"SELECT",
-      ".execute(query)"
+      ".execute(query)",
+      "+ username +",
+      "+ password +"
     ],
     "remediation_summary": "Use parameterized queries."
   },
@@ -73,7 +75,8 @@
       "os.system(",
       "subprocess.call(",
       "subprocess.run(",
-      "shell=True"
+      "shell=True",
+      "popen("
     ],
     "remediation_summary": "Avoid shell execution and validate inputs."
   },
@@ -87,7 +90,9 @@
       "TODO: security",
       "bypass_auth",
       "skip_auth",
-      "disable_auth"
+      "disable_auth",
+      "FIXME: auth",
+      "disable_security"
     ],
     "remediation_summary": "Implement secure-by-default design."
   },
@@ -100,7 +105,8 @@
     "patterns": [
       "DEBUG=True",
       "debug=True",
-      "app.run(debug=True)"
+      "app.run(debug=True)",
+      "FLASK_DEBUG=1"
     ],
     "remediation_summary": "Disable debug mode in production."
   },
@@ -113,7 +119,8 @@
     "patterns": [
       "allow_origins=['*']",
       "allow_origins=[\"*\"]",
-      "Access-Control-Allow-Origin: *"
+      "Access-Control-Allow-Origin: *",
+      "CORS(app)"
     ],
     "remediation_summary": "Restrict allowed origins."
   },
@@ -126,7 +133,8 @@
     "patterns": [
       "requirements.txt",
       "package.json",
-      "pip install"
+      "pip install",
+      "npm install"
     ],
     "remediation_summary": "Review dependencies using Snyk."
   },
@@ -139,7 +147,9 @@
     "patterns": [
       "if password ==",
       "username == 'admin'",
-      "username == \"admin\""
+      "username == \"admin\"",
+      "if user == 'root'",
+      "hardcoded_password"
     ],
     "remediation_summary": "Use secure authentication frameworks."
   },
@@ -152,7 +162,8 @@
     "patterns": [
       "pickle.loads(",
       "yaml.load(",
-      "marshal.loads("
+      "marshal.loads(",
+      "jsonpickle.decode("
     ],
     "remediation_summary": "Use safe loaders and validate input."
   },
@@ -178,37 +189,71 @@
     "patterns": [
       "requests.get(",
       "requests.post(",
-      "urllib.request.urlopen("
+      "urllib.request.urlopen(",
+      "httpx.get(",
+      "httpx.post("
     ],
     "remediation_summary": "Validate and whitelist outbound URLs."
   },
-
   {
     "rule_id": "OWASP-LLM01",
     "owasp_category": "LLM01",
     "name": "Prompt Injection Risk",
-    "description": "User input directly included in LLM prompt.",
+    "description": "User input directly included in LLM prompt without sanitization.",
     "severity": "High",
     "patterns": [
       "prompt = user_input",
       "f\"{user_input}\"",
+      "f'{user_input}'",
       "prompt += user_input",
       "messages.append(user_input)"
-    ]
+    ],
+    "remediation_summary": "Sanitize user input before including in prompts. Use XML delimiters to isolate untrusted content."
   },
   {
     "rule_id": "OWASP-LLM02",
     "owasp_category": "LLM02",
-    "name": "Sensitive Information Exposure",
-    "description": "Sensitive data sent to LLM.",
+    "name": "Sensitive Information Disclosure",
+    "description": "Sensitive data such as API keys or passwords may be sent to an LLM.",
     "severity": "High",
     "patterns": [
-      "api_key",
-      "secret_key",
-      "password",
-      "token",
-      "access_token"
-    ]
+      "llm.complete(secret",
+      "llm.complete(password",
+      "prompt = f\"{api_key}",
+      "prompt = f\"{password}",
+      "prompt = f\"{secret"
+    ],
+    "remediation_summary": "Never include secrets, credentials, or PII in LLM prompts."
+  },
+  {
+    "rule_id": "OWASP-LLM03",
+    "owasp_category": "LLM03",
+    "name": "Supply Chain Risk",
+    "description": "Unverified or unpinned LLM-related dependencies detected.",
+    "severity": "Medium",
+    "patterns": [
+      "from langchain_community",
+      "import langchain",
+      "from langchain import",
+      "pip install langchain",
+      "pip install openai"
+    ],
+    "remediation_summary": "Pin all LLM library versions. Audit community plugins before use."
+  },
+  {
+    "rule_id": "OWASP-LLM04",
+    "owasp_category": "LLM04",
+    "name": "Data and Model Poisoning",
+    "description": "Training or fine-tuning on untrusted or unvalidated data sources detected.",
+    "severity": "High",
+    "patterns": [
+      "trainer.train(",
+      "fine_tune(",
+      "finetune(",
+      "dataset=http",
+      "train_data=user"
+    ],
+    "remediation_summary": "Validate and sanitize all training data. Use trusted data sources only."
   },
   {
     "rule_id": "OWASP-LLM05",
@@ -219,34 +264,91 @@
     "patterns": [
       "eval(response)",
       "exec(response)",
+      "eval(llm_output)",
+      "exec(llm_output)",
+      "eval(ai_response)",
       "os.system(response)",
       "subprocess.run(response)"
-    ]
+    ],
+    "remediation_summary": "Never execute LLM output directly. Validate and sanitize all AI responses."
   },
   {
     "rule_id": "OWASP-LLM06",
     "owasp_category": "LLM06",
     "name": "Excessive Agent Permissions",
-    "description": "LLM can trigger system actions.",
+    "description": "LLM can trigger system actions with excessive permissions.",
     "severity": "High",
     "patterns": [
-      "os.system(",
+      "os.system(llm",
+      "subprocess.run(llm",
+      "os.system(response",
       "subprocess.Popen(",
       "delete_file(",
-      "send_email("
-    ]
+      "send_email(",
+      "agent.run("
+    ],
+    "remediation_summary": "Apply principle of least privilege. LLM should not directly trigger system calls."
+  },
+  {
+    "rule_id": "OWASP-LLM07",
+    "owasp_category": "LLM07",
+    "name": "System Prompt Leakage",
+    "description": "System prompt may contain sensitive instructions or credentials.",
+    "severity": "High",
+    "patterns": [
+      "system_prompt = f\"",
+      "system_prompt = f'",
+      "SYSTEM_PROMPT =",
+      "system_prompt += secret",
+      "system_prompt += api_key",
+      "system=f\""
+    ],
+    "remediation_summary": "Never include secrets in system prompts. Implement prompt confidentiality measures."
   },
   {
     "rule_id": "OWASP-LLM08",
     "owasp_category": "LLM08",
     "name": "Vector Store Data Leakage",
-    "description": "Sensitive data embedded into vector database.",
+    "description": "Sensitive or untrusted data may be stored in vector database without sanitization.",
     "severity": "Medium",
     "patterns": [
       "embedding_model.embed",
       "vector_store.add",
       "chroma.add",
-      "pinecone.upsert"
-    ]
+      "pinecone.upsert",
+      "vectordb.upsert(user",
+      "db.add_documents(user"
+    ],
+    "remediation_summary": "Sanitize all content before storing in vector databases. Validate retrieved content."
+  },
+  {
+    "rule_id": "OWASP-LLM09",
+    "owasp_category": "LLM09",
+    "name": "Misinformation Risk",
+    "description": "LLM output used directly without validation in sensitive contexts.",
+    "severity": "Medium",
+    "patterns": [
+      "display_to_user(response)",
+      "return llm.complete(",
+      "send_to_user(llm_output)",
+      "render(llm_output)",
+      "return ai_response"
+    ],
+    "remediation_summary": "Validate AI outputs in sensitive contexts. Add disclaimers. Implement human review for critical decisions."
+  },
+  {
+    "rule_id": "OWASP-LLM10",
+    "owasp_category": "LLM10",
+    "name": "Unbounded Consumption",
+    "description": "No rate limiting or token limits on LLM usage detected.",
+    "severity": "High",
+    "patterns": [
+      "max_tokens=99999",
+      "max_tokens=999999",
+      "max_tokens=-1",
+      "while True",
+      "for.*in.*llm.complete"
+    ],
+    "remediation_summary": "Implement rate limiting and token limits on all LLM endpoints."
   }
 ]
