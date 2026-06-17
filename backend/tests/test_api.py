@@ -15,8 +15,9 @@ import pytest
 # Config — change BASE_URL to http://127.0.0.1:8002 for local testing
 # ---------------------------------------------------------------------------
 BASE_URL = "https://secureguard-backend.jollyhill-a64c45f6.eastus.azurecontainerapps.io"
-API_KEY = "JBqa1ZWMEn2WPhgJvGifFN1_UkxjGBuGdzdfcFNL_ZI"
-ADMIN_KEY = "17db94a7ad0c4f25ec3f24ab74cdfdf5c3b49d7c2ea65e86b4fa866d914ab764"
+import os
+API_KEY = os.getenv("API_KEY", "JBqa1ZWMEn2WPhgJvGifFN1_UkxjGBuGdzdfcFNL_ZI")
+ADMIN_KEY = os.getenv("ADMIN_API_KEY", "17db94a7ad0c4f25ec3f24ab74cdfdf5c3b49d7c2ea65e86b4fa866d914ab764")
 
 VALID_HEADERS = {"X-API-Key": API_KEY}
 ADMIN_HEADERS = {"X-API-Key": ADMIN_KEY}
@@ -24,7 +25,7 @@ ADMIN_HEADERS = {"X-API-Key": ADMIN_KEY}
 VALID_CODE = """
 def login(user, pwd):
     query = "SELECT * FROM users WHERE user='" + user + "'"
-    password = "admin123"
+    password = "admin123" 
 """
 
 # ---------------------------------------------------------------------------
