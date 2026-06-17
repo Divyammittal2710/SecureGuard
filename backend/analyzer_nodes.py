@@ -38,7 +38,7 @@ def call_analyzer(system_prompt: str, user_prompt: str, node_name: str) -> list:
         response = client.chat.completions.create(
             model=MODEL,
             response_format={"type": "json_object"},  # JSON mode
-            max_tokens=1000,
+            max_completion_tokens=1000,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user",   "content": user_prompt}
