@@ -10,7 +10,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from schemas import CodeRequest, detect_language
 from database import init_db, get_full_scan_history, reset_scan_history
-from security_graph import security_graph
+from security_graph_v2 import security_graph_v2 as security_graph
 
 # ---------------------------------------------------------------------------
 # Logging — structured logs, never log sensitive values like API keys
