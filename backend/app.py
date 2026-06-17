@@ -190,10 +190,10 @@ async def analyze(
         "language": code_request.language.value
     })
     return {
-        "findings": result["findings"],
-        "risk_score": result["risk_score"],
-        "risk_level": result["risk_level"],
-        "report": result.get("report", ""),
+    "findings": result.get("all_findings", []),
+    "risk_score": result.get("risk_score", 0),
+    "risk_level": result.get("risk_level", "Low"),
+    "report": result.get("report", ""),
     }
 
 
