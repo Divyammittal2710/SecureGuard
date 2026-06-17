@@ -4,16 +4,16 @@ Preprocessing module for SecureGuard v2.
 Runs before any AI call to:
 1. Extract imports and dependencies
 2. Detect and strip suspicious comments (prompt injection attempts)
-3. Normalize whitespace
-4. Return cleaned code + metadata
+3. Detect injection in string literals and docstrings
+4. Normalize whitespace
+5. Return cleaned code + metadata
 """
 
 import re
 from typing import List, Tuple
 
 
-# ── Suspicious comment patterns ───────────────────────────────────────────────
-# These are patterns commonly used in prompt injection via code comments
+# ── Suspicious patterns ───────────────────────────────────────────────────────
 
 INJECTION_PATTERNS = [
     # Direct instruction overrides
@@ -66,55 +66,45 @@ INJECTION_PATTERNS = [
 
 def extract_imports(code: str, language: str) -> List[str]:
     """
-    Extract import statements from code.
+    Extract import statements from code based on language.
     Used by dependency_analyzer node.
     """
     imports = []
 
     if language == "python":
-        # Match: import x, from x import y
         pattern = r"^(?:import|from)\s+[\w\.]+"
         imports = re.findall(pattern, code, re.MULTILINE)
 
     elif language in ("javascript", "typescript"):
         imports = []
-        # Match: require('express'), require("express")
         require_pattern = r"require\s*\(\s*['\"][\w\.\-\/@]+"
         imports += re.findall(require_pattern, code)
-        # Match: import axios from 'axios', import { x } from 'y'
         import_pattern = r"from\s+['\"][\w\.\-\/@]+"
         imports += re.findall(import_pattern, code)
-        # Match: import 'module' (side effect imports)
         side_effect_pattern = r"^import\s+['\"][\w\.\-\/@]+"
         imports += re.findall(side_effect_pattern, code, re.MULTILINE)
 
     elif language == "java":
-        # Match: import com.example.Class
         pattern = r"^import\s+[\w\.]+"
         imports = re.findall(pattern, code, re.MULTILINE)
 
     elif language == "go":
-        # Match: import "package" or import ( "package" )
         pattern = r"\"[\w\.\/\-]+"
         imports = re.findall(pattern, code)
 
     elif language == "rust":
-        # Match: use std::io, extern crate x
         pattern = r"^(?:use|extern\s+crate)\s+[\w\:]+"
         imports = re.findall(pattern, code, re.MULTILINE)
 
     elif language == "php":
-        # Match: require_once, include, use
         pattern = r"(?:require|include|use)\s+[\w\\\'\"]+"
         imports = re.findall(pattern, code)
 
     elif language == "ruby":
-        # Match: require 'gem', require_relative
         pattern = r"require(?:_relative)?\s+['\"][\w\/\.]+"
         imports = re.findall(pattern, code)
 
     elif language in ("cpp", "c"):
-        # Match: #include <lib> or #include "file"
         pattern = r"#include\s*[<\"][\w\.\/]+"
         imports = re.findall(pattern, code)
 
@@ -128,23 +118,41 @@ def extract_comments(code: str, language: str) -> List[str]:
     comments = []
 
     if language in ("python", "ruby"):
-        # Single line: # comment
         pattern = r"#.*$"
         comments = re.findall(pattern, code, re.MULTILINE)
 
     elif language in ("javascript", "typescript", "java", "go", "cpp", "c", "rust", "php"):
-        # Single line: // comment
         single = re.findall(r"//.*$", code, re.MULTILINE)
-        # Multi line: /* comment */
         multi = re.findall(r"/\*.*?\*/", code, re.DOTALL)
         comments = single + multi
 
     return [c.strip() for c in comments]
 
 
+def extract_string_literals(code: str) -> List[str]:
+    """
+    Extract string literals and docstrings from code.
+    These can contain injection attempts that bypass comment stripping.
+    Only extracts strings longer than 20 chars to avoid noise.
+    """
+    literals = []
+
+    # Triple quoted strings (docstrings)
+    triple_double = re.findall(r'"""(.*?)"""', code, re.DOTALL)
+    triple_single = re.findall(r"'''(.*?)'''", code, re.DOTALL)
+    literals += triple_double + triple_single
+
+    # Single line strings — only if long enough to be suspicious
+    single_double = re.findall(r'"([^"]{20,})"', code)
+    single_single = re.findall(r"'([^']{20,})'", code)
+    literals += single_double + single_single
+
+    return [l.strip() for l in literals if l.strip()]
+
+
 def is_suspicious_comment(comment: str) -> bool:
     """
-    Check if a comment contains prompt injection patterns.
+    Check if a comment or string contains prompt injection patterns.
     Case insensitive matching.
     """
     comment_lower = comment.lower()
@@ -183,16 +191,36 @@ def strip_comments(code: str, language: str) -> Tuple[str, List[str]]:
     return cleaned.strip(), removed
 
 
+def strip_docstrings(code: str) -> Tuple[str, List[str]]:
+    """
+    Remove docstrings from code sent to AI.
+    Replaces with a safe placeholder so code structure is preserved.
+    Returns: (cleaned_code, list_of_removed_docstrings)
+    """
+    removed = []
+
+    def replacer_double(match):
+        removed.append(match.group(0))
+        return '""" [docstring removed] """'
+
+    def replacer_single(match):
+        removed.append(match.group(0))
+        return "''' [docstring removed] '''"
+
+    cleaned = re.sub(r'""".*?"""', replacer_double, code, flags=re.DOTALL)
+    cleaned = re.sub(r"'''.*?'''", replacer_single, cleaned, flags=re.DOTALL)
+
+    return cleaned, removed
+
+
 def normalize_whitespace(code: str) -> str:
     """
     Normalize excessive whitespace while preserving code structure.
-    - Collapse 3+ blank lines into 2
     - Strip trailing whitespace from each line
+    - Collapse 3+ blank lines into 2
     """
-    # Strip trailing whitespace per line
     lines = [line.rstrip() for line in code.split("\n")]
 
-    # Collapse 3+ consecutive blank lines into 2
     result = []
     blank_count = 0
     for line in lines:
@@ -217,7 +245,7 @@ def preprocess(code: str, language: str) -> dict:
     # Step 1 — Extract imports BEFORE stripping
     imports = extract_imports(code, language)
 
-    # Step 2 — Extract all comments to check for injection
+    # Step 2 — Extract all comments
     all_comments = extract_comments(code, language)
 
     # Step 3 — Find suspicious comments
@@ -225,21 +253,35 @@ def preprocess(code: str, language: str) -> dict:
         c for c in all_comments
         if is_suspicious_comment(c)
     ]
-    has_suspicious_comments = len(flagged_comments) > 0
 
-    # Step 4 — Strip ALL comments from code sent to AI
-    # This prevents ANY comment from being used for injection
+    # Step 4 — Extract string literals and docstrings
+    string_literals = extract_string_literals(code)
+
+    # Step 5 — Find suspicious string literals
+    flagged_strings = [
+        s for s in string_literals
+        if is_suspicious_comment(s)
+    ]
+
+    # Step 6 — Strip ALL comments
     cleaned_code, stripped_comments = strip_comments(code, language)
 
-    # Step 5 — Normalize whitespace
+    # Step 7 — Strip docstrings (can contain injection)
+    cleaned_code, stripped_docstrings = strip_docstrings(cleaned_code)
+
+    # Step 8 — Normalize whitespace
     cleaned_code = normalize_whitespace(cleaned_code)
+
+    has_suspicious = len(flagged_comments) > 0 or len(flagged_strings) > 0
 
     return {
         "cleaned_code": cleaned_code,
         "original_code": original_code,
         "imports": imports,
-        "has_suspicious_comments": has_suspicious_comments,
+        "has_suspicious_comments": has_suspicious,
         "flagged_comments": flagged_comments,
+        "flagged_strings": flagged_strings,
         "stripped_comments": stripped_comments,
+        "stripped_docstrings": stripped_docstrings,
         "language": language,
     }

@@ -32,12 +32,13 @@ def call_analyzer(system_prompt: str, user_prompt: str, node_name: str) -> list:
     """
     Makes a focused AI call and returns parsed findings list.
     Uses JSON mode — AI must return valid JSON.
-    Falls back to empty list on any failure.
+    Handles Azure content filter blocks as jailbreak findings.
+    Falls back to empty list on other failures.
     """
     try:
         response = client.chat.completions.create(
             model=MODEL,
-            response_format={"type": "json_object"},  # JSON mode
+            response_format={"type": "json_object"},
             max_completion_tokens=1000,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -55,10 +56,10 @@ def call_analyzer(system_prompt: str, user_prompt: str, node_name: str) -> list:
         validated = []
         for f in findings:
             if all(k in f for k in ("rule_id", "line_hint", "description", "confidence", "severity", "remediation")):
-                # Enforce confidence values
+                # Enforce valid confidence values
                 if f["confidence"] not in ("high", "medium", "low"):
                     f["confidence"] = "low"
-                # Enforce severity values
+                # Enforce valid severity values
                 if f["severity"] not in ("High", "Medium", "Low"):
                     f["severity"] = "Low"
                 validated.append(f)
@@ -71,7 +72,31 @@ def call_analyzer(system_prompt: str, user_prompt: str, node_name: str) -> list:
     except json.JSONDecodeError as e:
         logger.error(f"{node_name}: JSON decode failed: {e}")
         return []
+
     except Exception as e:
+        error_str = str(e)
+
+        # Detect Azure content filter block — jailbreak in string literals/docstrings
+        if any(keyword in error_str for keyword in [
+            "content_filter",
+            "jailbreak",
+            "ResponsibleAIPolicyViolation",
+            "content management policy"
+        ]):
+            logger.warning(
+                f"{node_name}: Azure content filter triggered — "
+                f"jailbreak attempt detected in submitted code"
+            )
+            return [{
+                "rule_id": "LLM01_JAILBREAK_DETECTED",
+                "category": "LLM01",
+                "line_hint": "string literal or docstring in submitted code",
+                "description": "Azure content filter detected a jailbreak attempt embedded in the submitted code",
+                "confidence": "high",
+                "severity": "High",
+                "remediation": "Remove prompt injection payloads from string literals and docstrings"
+            }]
+
         logger.error(f"{node_name}: AI call failed: {e}")
         return []
 
@@ -80,8 +105,8 @@ def call_analyzer(system_prompt: str, user_prompt: str, node_name: str) -> list:
 
 def node_injection_analyzer(state: ScanStateV2) -> dict:
     """
-    Specialist: SQL injection, command injection, prompt injection,
-    unsafe output execution.
+    Specialist: SQL injection, command injection,
+    prompt injection, unsafe output execution.
     OWASP: A03 SQL, A03 Command, LLM01, LLM05
     """
     preprocess = state.get("preprocess_result", {})
