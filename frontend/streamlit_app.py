@@ -70,7 +70,7 @@ if code.strip():
                     f"Consider changing the language for more accurate analysis."
                 )
     except:
-        pass  # Detection failure is non-critical — don't block the user
+        pass
 
 if st.button("Analyze"):
 
@@ -82,7 +82,8 @@ if st.button("Analyze"):
         response = requests.post(
             f"{BACKEND_URL}/analyze",
             json={"code": code, "language": language},
-            headers=HEADERS
+            headers=HEADERS,
+            timeout=120.0  # v2 makes 4 AI calls — needs more time
         )
 
         if response.status_code == 401:
@@ -94,13 +95,41 @@ if st.button("Analyze"):
             st.stop()
 
         if response.status_code == 429:
-            st.error("⏱️ Rate limit exceeded — please wait a minute and try again.")
+            st.error("⏱️ Rate limit exceeded — please wait and try again.")
             st.stop()
 
         result = response.json()
 
         st.divider()
 
+        # ── Prompt Injection Warning ──────────────────────────────────────
+        preprocess = result.get("preprocess_result", {})
+        if preprocess:
+            has_suspicious = preprocess.get("has_suspicious_comments", False)
+            flagged_comments = preprocess.get("flagged_comments", [])
+            flagged_strings = preprocess.get("flagged_strings", [])
+            stripped_docstrings = preprocess.get("stripped_docstrings", [])
+
+            if has_suspicious:
+                st.error(
+                    "🚨 **Prompt Injection Attempt Detected** — "
+                    "Suspicious content found in your code and stripped before analysis. "
+                    "Your code was still analyzed for real vulnerabilities."
+                )
+                if flagged_comments:
+                    with st.expander("View flagged comments"):
+                        for c in flagged_comments:
+                            st.code(c)
+                if flagged_strings:
+                    with st.expander("View flagged string literals"):
+                        for s in flagged_strings:
+                            st.code(s)
+                if stripped_docstrings:
+                    with st.expander("View stripped docstrings"):
+                        for d in stripped_docstrings:
+                            st.code(d)
+
+        # ── Risk Assessment ───────────────────────────────────────────────
         st.header("📊 Risk Assessment")
 
         risk_score = result.get("risk_score", 0)
@@ -110,10 +139,8 @@ if st.button("Analyze"):
 
         with col1:
             st.metric(label="Risk Score", value=f"{risk_score}/10")
-
         with col2:
             st.metric(label="Risk Level", value=risk_level)
-
         with col3:
             st.metric(label="Language", value=language.upper())
 
@@ -126,17 +153,25 @@ if st.button("Analyze"):
 
         st.divider()
 
+        # ── Confirmed Findings ────────────────────────────────────────────
         st.header("🔍 Detected Findings")
 
         findings = result.get("findings", [])
+        needs_review = result.get("needs_human_review", [])
 
-        if findings:
-            for finding in findings:
+        # Separate confirmed from needs_review
+        confirmed = [f for f in findings if f not in needs_review]
+
+        if confirmed:
+            st.subheader("Confirmed Findings")
+            for finding in confirmed:
                 severity = finding.get("severity", "Unknown")
+                confidence = finding.get("confidence", "")
                 message = (
-                    f"**{finding.get('name')}**  \n"
-                    f"OWASP: {finding.get('owasp')}  \n"
-                    f"Severity: {severity}"
+                    f"**{finding.get('rule_id')}**  \n"
+                    f"Category: {finding.get('category', '')}  \n"
+                    f"Where: {finding.get('line_hint', '')}  \n"
+                    f"Severity: {severity}  |  Confidence: {confidence}"
                 )
                 if severity.lower() == "high":
                     st.error(message)
@@ -145,10 +180,24 @@ if st.button("Analyze"):
                 else:
                     st.info(message)
         else:
-            st.success("✅ No OWASP findings detected.")
+            st.success("✅ No confirmed findings.")
+
+        # ── Needs Human Review ────────────────────────────────────────────
+        if needs_review:
+            st.subheader("⚠️ Needs Human Review (Low Confidence)")
+            st.caption("These findings have low confidence — a human should verify them.")
+            for finding in needs_review:
+                severity = finding.get("severity", "Unknown")
+                message = (
+                    f"**{finding.get('rule_id')}**  \n"
+                    f"Where: {finding.get('line_hint', '')}  \n"
+                    f"Severity: {severity}  |  Confidence: low"
+                )
+                st.warning(message)
 
         st.divider()
 
+        # ── Security Report ───────────────────────────────────────────────
         st.header("📋 Security Report")
 
         report = result.get("report", "")
@@ -158,6 +207,7 @@ if st.button("Analyze"):
     except Exception as e:
         st.error(f"Error: {str(e)}")
 
+# ── Sidebar History ───────────────────────────────────────────────────────────
 try:
     history_response = requests.get(
         f"{BACKEND_URL}/history",
